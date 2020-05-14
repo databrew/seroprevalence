@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# saint
+# Seroprevalence study
 
 <!-- badges: start -->
 
@@ -15,5 +15,5 @@ You can install the released version of saint from
 [CRAN](https://CRAN.R-project.org) with:
 
 ``` r
-devtools::install_github("databrew/saint")
+devtools::install_github("databrew/seroprevalence")
 ```

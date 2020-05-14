@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-# saint
+# Seroprevalence study
 
 <!-- badges: start -->
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental)
@@ -25,5 +25,5 @@ knitr::opts_chunk$set(
 You can install the released version of saint from [CRAN](https://CRAN.R-project.org) with:
 
 ``` r
-devtools::install_github("databrew/saint")
+devtools::install_github("databrew/seroprevalence")
 ```
