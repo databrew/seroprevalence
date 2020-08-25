@@ -1,8 +1,8 @@
-Package: saint
-Title: SAINT
+Package: seroprevalence
+Title: seroprevalence
 Version: 0.0.0.9000
 Authors@R: person('Joe', 'Brew', email = 'joe@databrew.cc', role = c('cre', 'aut'))
-Description: Dashboard for the SAINT clinical trial
+Description: seroprevalence
 License: MIT + file LICENSE
 Imports: 
     config,
@@ -18,12 +18,36 @@ Imports:
     tidyr,
     ggplot2,
     ggthemes,
-    RColorBrewer
+    RColorBrewer,
+    grid,
+    scales,
+    grDevices,
+    lubridate,
+    readxl,
+    RPostgreSQL,
+    devtools,
+    DBI,
+    RPostgres,
+    dismo,
+    gpclib,
+    gsheet,
+    maptools,
+    qrcode,
+    readr,
+    rgeos,
+    sp,
+    rmarkdown,
+    leaflet,
+    maps,
+    Hmisc,
+    extrafont,
+    rgdal,
+    deldir,
+    kableExtra
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.1.0
+RoxygenNote: 7.1.1
 Suggests: 
     testthat,
-    knitr,
-    rmarkdown
+    knitr
 VignetteBuilder: knitr

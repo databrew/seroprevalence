@@ -14,9 +14,9 @@
 ## Fill the DESCRIPTION ----
 ## Add meta data about your application
 golem::fill_desc(
-  pkg_name = "saint", # The Name of the package containing the App 
-  pkg_title = "SAINT", # The Title of the package containing the App 
-  pkg_description = "Dashboard for the SAINT clinical trial", # The Description of the package containing the App 
+  pkg_name = "seroprevalence", # The Name of the package containing the App 
+  pkg_title = "seroprevalence", # The Title of the package containing the App 
+  pkg_description = "seroprevalence", # The Description of the package containing the App 
   author_first_name = "Joe", # Your First Name
   author_last_name = "Brew", # Your Last Name
   author_email = "joe@databrew.cc", # Your Email

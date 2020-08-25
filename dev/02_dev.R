@@ -50,9 +50,9 @@ usethis::use_test( "app" )
 
 # Documentation
 
-## Vignette ----
-usethis::use_vignette("saint")
-devtools::build_vignettes()
+# ## Vignette ----
+# usethis::use_vignette("seroprevalence")
+# devtools::build_vignettes()
 
 ## Code coverage ----
 ## (You'll need GitHub there)

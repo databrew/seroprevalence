@@ -22,7 +22,7 @@ knitr::opts_chunk$set(
 
 ## Installation
 
-You can install the released version of saint from [CRAN](https://CRAN.R-project.org) with:
+You can install the released version of seroprevalence from [CRAN](https://CRAN.R-project.org) with:
 
 ``` r
 devtools::install_github("databrew/seroprevalence")

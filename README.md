@@ -11,7 +11,7 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 
 ## Installation
 
-You can install the released version of saint from
+You can install the released version of seroprevalence from
 [CRAN](https://CRAN.R-project.org) with:
 
 ``` r

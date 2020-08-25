@@ -1,0 +1,51 @@
+---
+title: "Seroprevalence analysis"
+author: '2020-08-21'
+output: html_document
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = NA, 
+               echo = TRUE, 
+               warning = FALSE, 
+               message = FALSE, 
+               error = TRUE, 
+               cache = FALSE,
+  fig.path = "figures/",
+  out.width = "100%"
+)
+```
+
+```{r}
+cat('Date-time: ', Sys.time())
+## Load libraries
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(readr)
+library(gsheet)
+library(anytime)
+library(seroprevalence)
+library(databrew) # devtools::install_github('databrew/databrew')
+options(scipen = '999')
+ggplot2::theme_set(theme_bw())
+library(yaml)
+creds <- yaml::yaml.load_file('credentials.yaml')
+```
+
+```{r}
+# Read in data
+if('fetched_data.RData' %in% dir()){
+  load('fetched_data.RData')
+} else {
+  data <- odk_get_data(url = creds$url,
+                       id = 'seroprevalence',
+                       unknown_id2 = TRUE,
+                       user = creds$user,
+                       password = creds$password)
+  xxx
+  save(xxx, file = 'fetched_data.RData')
+}
+```
