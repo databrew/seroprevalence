@@ -1,1 +1,6 @@
 credentials.yaml
+fetched_data.RData
+*.html
+*.dta
+figures/
+data/

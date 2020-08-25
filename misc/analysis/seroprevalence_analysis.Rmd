@@ -29,10 +29,12 @@ library(gsheet)
 library(anytime)
 library(seroprevalence)
 library(databrew) # devtools::install_github('databrew/databrew')
-options(scipen = '999')
+# options(scipen = '999')
 ggplot2::theme_set(theme_bw())
 library(yaml)
 creds <- yaml::yaml.load_file('credentials.yaml')
+library(haven)
+library(sp)
 ```
 
 ```{r}
@@ -45,7 +47,356 @@ if('fetched_data.RData' %in% dir()){
                        unknown_id2 = TRUE,
                        user = creds$user,
                        password = creds$password)
-  xxx
-  save(xxx, file = 'fetched_data.RData')
+  # Get locations
+  pd <- data$non_repeats
+  # extract lat long
+  pd$lon <- as.numeric(unlist(lapply(strsplit(pd$gps, ' '), function(x) x[2])))
+  pd$lat <- as.numeric(unlist(lapply(strsplit(pd$gps, ' '), function(x) x[1])))
+  
+  # Read in OSM data
+  dat <- sf::st_read('data/map.osm', layer = 'multipolygons', quiet = TRUE)
+  dat_sp <- as(dat, 'Spatial')
+  dat_sp <- dat_sp[is.na(dat_sp@data$type) | dat_sp@data$type == 'multipolygon',]
+  
+  dat2 <- sf::st_read('data/map2.osm', layer = 'multipolygons', quiet = TRUE)
+  dat_sp2 <- as(dat2, 'Spatial')
+  dat_sp2 <- dat_sp2[is.na(dat_sp2@data$type) | dat_sp2@data$type == 'multipolygon',]
+  
+  dat3 <- sf::st_read('data/map3.osm', layer = 'multipolygons', quiet = TRUE)
+  dat_sp3 <- as(dat3, 'Spatial')
+  dat_sp3 <- dat_sp3[is.na(dat_sp3@data$type) | dat_sp3@data$type == 'multipolygon',]
+  
+  dat_sp <- rbind(dat_sp3, dat_sp2, dat_sp)
+  dat_sp <- dat_sp[!duplicated(dat_sp@data),]
+  
+  # Read in Marta's DTA
+  df <- haven::read_dta('Cizur_all_working_data_20200813.dta') %>%
+    mutate(infection = ifelse(overall_infection == 1, TRUE, FALSE))
+  # Remove extreme observations
+  df <- df %>%
+    filter(!is.na(lon)) %>%
+    filter(lon >= -1.9, lon <= 1.5,
+           lat >= 42.7, lat <= 42.9)
+  
+  rounder <- 3
+  # Make a basic grid map
+  xr <- range(df$lon, na.rm = T)
+  yr <- range(df$lat, na.rm = T)
+  xr <- round(xr, rounder)
+  yr <- round(yr, rounder)
+  xs <- seq(min(xr), max(xr), by = as.numeric(paste0('.', paste0(rep(0, abs(rounder)-1), collapse = ''), 1)))
+  ys <- seq(min(yr), max(yr), by = as.numeric(paste0('.', paste0(rep(0, abs(rounder)-1), collapse = ''), 1)))
+  griddy <- expand.grid(x = xs,
+                        y = ys) %>%
+    mutate(positives = NA,
+           total = NA,
+           smoothed = NA)
+  # Get a rounded version of locations
+  df <- df %>%
+    mutate(lon_round = round(lon, rounder),
+           lat_round = round(lat, rounder))
+  # Get spatial version
+  df_sp <- df
+  coordinates(df_sp) <- ~lon+lat
+  proj4string(df_sp) <- proj4string(bohemia::moz0)
+  griddy_sp <- griddy
+  coordinates(griddy_sp) <- ~x+y
+  proj4string(griddy_sp) <- proj4string(df_sp)
+  distance_matrix <- rgeos::gDistance(spgeom1 = df_sp, 
+                                      spgeom2 = griddy_sp,
+                                      byid = TRUE)
+  # Prepare data
+  for(i in 1:nrow(griddy)){
+    sub_data <- df %>%
+      filter(lon_round == griddy$x[i],
+             lat_round == griddy$y[i])
+    if(nrow(sub_data)>0){
+      griddy$positives[i] <- length(which(sub_data$infection))
+      griddy$total[i] <- nrow(sub_data)
+    }
+      this_distances <- as.numeric(distance_matrix[i,])
+      vals <- weighted.mean(as.numeric(df$infection), w  = 1 / this_distances^(1/2))
+      griddy$smoothed[i] <- vals
+  }
+
+  dat_sp@data$id <- 1:nrow(dat_sp@data)
+  dat_fort <- fortify(dat_sp, region = 'id')
+  
+  
+  save(data,
+       dat,
+       dat_fort,
+       dat_sp,
+       griddy,
+       griddy_sp,
+       df,
+       df_sp,
+       pd,
+       data,
+       file = 'fetched_data.RData')
 }
 ```
+
+
+*IMPORTANT*: `r length(which(is.na(pd$lon)))` location values were not collected of a total of `r nrow(pd)` participants (ie, `r round(length(which(is.na(pd$lon))) / nrow(pd) * 100, digits = 1)` %).
+
+```{r}
+library(leaflet)
+
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(data = df_sp[!df_sp@data$infection,], radius = 1) %>%
+  addCircleMarkers(data = df_sp[df_sp@data$infection,], color = 'red', radius = 2)
+```
+
+```{r, fig.height = 13, fig.width = 13}
+plot(dat_sp)
+points(df_sp[!df_sp@data$infection,], col = 'blue', pch = 16)
+points(df_sp[df_sp@data$infection,], col = 'red', pch = 16)
+```
+
+```{r}
+library(raster)
+r <- raster::rasterFromXYZ(xyz = griddy[,c('x', 'y', 'smoothed')])
+proj4string(r) <- proj4string(bohemia::moz0)
+center <- apply(coordinates(r), 2, median)
+bb <- bbox(r)
+pal <- colorNumeric(c('blue', 'lightblue',
+                                                              # 'beige',
+                                                              # 'grey',
+                                                              # 'yellow',
+                                                              # 'white',
+                                                              # 'orange',
+                                                              'darkorange', 
+                                                              'red',
+                                                              'darkred',
+                                                              'black'), values(r),
+  na.color = "transparent")
+leaflet() %>% addProviderTiles('Stamen.Toner') %>%
+    addRasterImage(r, colors = pal, opacity = 0.8) %>%
+  addLegend(pal = pal, values = values(r),
+    title = "Smoothed estimated prevalence") %>%
+  leaflet::setMaxBounds(lng1 = bb[1,1], lat1 = bb[2,1],
+                        lng2 = bb[1,2], lat2 = bb[2,2])
+
+```
+
+```{r}
+ggplot(data = griddy,
+       aes(x = x,
+           y = y,
+           fill = smoothed)) +
+  geom_tile() +
+  geom_polygon(data = dat_fort,
+               aes(x = long,
+                   y = lat,
+                   group = group),
+               fill = NA,
+               lwd = 0.2,
+               color = 'black') +
+  databrew::theme_simple() +
+  scale_fill_gradientn(name = '', colors = colorRampPalette(c('lightblue',
+                                                              # 'beige',
+                                                              # 'grey',
+                                                              # 'yellow',
+                                                              # 'white',
+                                                              # 'orange',
+                                                              'darkorange', 
+                                                              'red',
+                                                              'darkred'))(20)) +
+  xlim(-1.82, -1.62) +
+  ylim(42.75, 42.81) +
+  ggthemes::theme_map()
+```
+
+# Clustering
+
+Kulldorf clustering detection method
+
+Kulldorff spatial cluster detection method for a study region with n areas. The method constructs zones by consecutively aggregating nearest-neighboring areas until a proportion of the total study population is included. Given the observed number of cases, the likelihood of each zone is computed using either binomial or poisson likelihoods. The procedure reports the zone that is the most likely cluster and generates significance measures via Monte Carlo sampling. Further, secondary clusters, whose Monte Carlo p-values are below the α-threshold, are reported as well.
+
+```{r}
+library(class)
+library(geosphere) # has functionality for spatial clustering
+df_spatial <- df_sp
+df_spatial@data <- data.frame(df_spatial@data)
+mdist <- distm(df_spatial)
+test <- hclust(as.dist(mdist), method = "complete")
+
+# Define a distance threshold
+d = 1000 # meters (change this up or down to make bigger or smaller clusters, respectively)
+df_spatial$cluster <- cutree(test, h = d)
+# df_spatial$cluster <- if_else(df_spatial$latitude>-25.42, 1, 2)
+
+
+# View our clustering results
+library(RColorBrewer)
+cols <- colorRampPalette(brewer.pal(9, "Spectral"))(length(unique(df_spatial$cluster)))
+cols <- sample(cols, length(cols))
+df_spatial$color <- cols[df_spatial$cluster]
+plot(df_spatial, col = df_spatial$color, pch = 1, axes = TRUE, cex.axis = 0.5, las = 1)
+
+# How many clusters
+length(unique(df_spatial$cluster))
+
+# Now that we are satisfied with our clustering results,
+# we will create polygons with borders
+clusters <- unique(sort(df_spatial$cluster))
+
+# Loop through each cluster, and for each one use "convex hull"
+# to create a border
+ch <- list()
+for (i in 1:length(clusters)){
+  this_cluster <- clusters[i]
+  sub_df <- df_spatial[df_spatial@data$cluster == this_cluster,]
+  x <- rgeos::gConvexHull(sub_df)
+  ch[[i]] <- x
+}
+
+
+# Create delaunay triangulation / voronoi tiles for entire surface
+voronoi <- function(shp = df_spatial){
+  
+  shp@data <- data.frame(shp@data)
+  
+  # Fix row names
+  row.names(shp) <- 1:nrow(shp)
+  
+  # Remove any identical ones
+  shp <- shp[!duplicated(shp$lon,
+                         shp$lat),]
+  
+  # Helper function to create coronoi polygons (tesselation, not delaunay triangles)
+  # http://carsonfarmer.com/2009/09/voronoi-polygons-with-r/
+  voronoipolygons = function(layer) {
+    require(deldir)
+    require(rgeos)
+    crds = layer@coords
+    z = deldir(crds[,1], crds[,2])
+    w = tile.list(z)
+    polys = vector(mode='list', length=length(w))
+    require(sp)
+    for (i in seq(along=polys)) {
+      pcrds = cbind(w[[i]]$x, w[[i]]$y)
+      pcrds = rbind(pcrds, pcrds[1,])
+      polys[[i]] = Polygons(list(Polygon(pcrds)), ID=as.character(i))
+    }
+    SP = SpatialPolygons(polys)
+    voronoi = SpatialPolygonsDataFrame(SP, data=data.frame(x=crds[,1], 
+                                                           y=crds[,2], row.names=sapply(slot(SP, 'polygons'), 
+                                                                                        function(x) slot(x, 'ID'))))
+  }
+  # http://gis.stackexchange.com/questions/180682/merge-a-list-of-spatial-polygon-objects-in-r
+  appendSpatialPolygons <- function(x) {
+    ## loop over list of polygons
+    for (i in 2:length(x)) {
+      # create initial output polygon
+      if (i == 2) {
+        out <- maptools::spRbind(x[[i-1]], x[[i]])
+        # append all following polygons to output polygon  
+      } else {
+        out <- maptools::spRbind(out, x[[i]])
+      }
+    }
+    return(out)
+  }
+  
+  tile_polys <- voronoipolygons(shp)
+  # Add the bairro numbers
+  tile_polys@data$cluster_number <- the_clusters <- shp$cluster
+  cols <- rainbow(as.numeric(factor(tile_polys@data$cluster_number)))
+  
+  # Disolve borders
+  x = gUnaryUnion(tile_polys, id = tile_polys$cluster_number)
+  
+  jdata = SpatialPolygonsDataFrame(Sr=x, 
+                                   data=data.frame(cluster_number = as.numeric(as.character(names(x)))),FALSE)
+  
+  return(jdata)
+}
+
+# Get voronoi tesselations
+dfv <- voronoi(shp = df_spatial)
+
+# For each cluster in df_spatial, we want to get the % positive
+get_positivity <- function(var = "infection"){
+  require(dplyr)
+  x <- df_spatial@data
+  x$var <- df_spatial@data[,var]
+  out <- x %>%
+    group_by(cluster) %>%
+    summarise(positives = length(which(var == 1)),
+              total = n()) %>%
+    mutate(percentage = positives / total * 100)
+  return(out)
+}
+
+# Run our function
+get_positivity("infection")
+
+# Define a function for identifying hotspots
+ana_hotspot <- function(var = "infection",
+                        plot_it = FALSE,
+                        seed = 1){
+  # set.seed(seed)  
+  # Use the kulldorf method to get hotspots
+  library(SpatialEpi)
+  
+  # Create centroids
+  centroids <- as.matrix(coordinates(dfv))
+  
+  # Get the positivity rate for a variable
+  positivity <- get_positivity(var)
+  
+  # Define some parameters about our results
+  cases <- positivity$positives
+  population <- positivity$total
+  n_strata <- nrow(dfv@data)
+  
+  expected_cases <- sum(cases, na.rm = TRUE)
+  expected_cases <- expected_cases * (population / sum(population, na.rm = TRUE))
+  
+  # Set paramaters
+  pop.upper.bound <- 0.5
+  n.simulations <- 9999
+  alpha.level <- 0.05
+  plot <- FALSE
+  
+  poisson <- kulldorff(geo = centroids,
+                       cases = cases,
+                       population = population,
+                       expected.cases = expected_cases,
+                       pop.upper.bound = pop.upper.bound,
+                       n.simulations = n.simulations,
+                       alpha.level = 0.05,
+                       plot = FALSE)
+  
+  if(plot_it){
+    # get clusters
+    cluster <- poisson$most.likely.cluster$location.IDs.included
+    # cluster <- df_spatial@data[cluster,"cluster"]
+    secondary_cluster <- poisson$secondary.clusters$location.IDs.included
+    
+    # Plot
+    plot(dfv,axes=TRUE, border = adjustcolor("black", alpha.f = 0.5))
+    plot(dfv[cluster,],add=TRUE,col="red")
+    # plot(man3, add = TRUE)
+    points(df_spatial, pch= ifelse(df_spatial@data[,var] == 1, "+", "0"),
+           cex=0.5,
+           col= adjustcolor("black", alpha.f = 0.5))
+    if(!is.null(secondary_cluster)){
+      plot(dfv[secondary_cluster,], add = TRUE, col = "yellow")
+    }
+    p_value <- poisson$most.likely.cluster$p.value
+    p_value <- ifelse(p_value == 1, "> 0.99", p_value)
+    title(main = paste0(var, " p:",p_value ))
+  } else {
+    poisson
+  }
+}
+
+# Run the function just to make a pretty map of hotspots
+ana_hotspot("infection", plot_it = TRUE)
+```
+
+
